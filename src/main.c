@@ -9,10 +9,11 @@
 #endif
 #include <GL/gl.h>
 #include <GL/glu.h>
+#include <stdlib.h>
 #include <string.h>
-#include <windows.h>
 #include <time.h>
 #include <stdbool.h>
+#include "steam.h"
 
 #ifdef IMGUI_HAS_IMSTR
 #define igBegin igBegin_Str
@@ -22,12 +23,15 @@
 #define igButton igButton_Str
 #endif
 
-SDL_Window *window = NULL;
 
+
+
+
+SDL_Window *window = NULL;
 
 int main(int argc, char* argv[])
 {
-
+  //allow printf
   setbuf(stdout, NULL);
 
 
@@ -36,22 +40,13 @@ int main(int argc, char* argv[])
     return -1;
   }
  
-  // Decide GL+GLSL versions
-#if __APPLE__
-    // GL 3.2 Core + GLSL 150
-    const char* glsl_version = "#version 150";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-#else
-    // GL 3.0 + GLSL 130
-    const char* glsl_version = "#version 130";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-#endif
+
+  // GL 3.0 + GLSL 130
+  const char* glsl_version = "#version 130";
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 
   // and prepare OpenGL stuff
   SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
@@ -62,7 +57,7 @@ int main(int argc, char* argv[])
   SDL_GetCurrentDisplayMode(0, &current);
   
   window = SDL_CreateWindow(
-      "Path of Exile Weapon DPS Calculator", 0, 0, 800, 600,
+      "Steam De-Clutter", 0, 0, 800, 600,
       SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
       );
   if (window == NULL) {
@@ -99,7 +94,23 @@ int main(int argc, char* argv[])
   clearColor.z = 0.60f;
   clearColor.w = 1.00f;
 
-  char input_buffer[1024] = {0};
+  SteamData SteamData;
+  SteamData.GameCount = 0;
+  SteamData.LibraryCount = 0;
+  bool pathflag = FindSteamInstall(SteamData.SteamLocation, 256);
+
+  if(pathflag == TRUE){
+    FindLibraries(SteamData.LibraryLocations, &SteamData.LibraryCount, SteamData.SteamLocation);
+    printf("Found %d Steam libraries:\n", SteamData.LibraryCount);
+    for (int i = 0; i < SteamData.LibraryCount; i++) {
+        printf("%s\n", SteamData.LibraryLocations[i]);
+    }
+  } else {
+    printf("Unable to locate steam installation. Please provide install location\n");
+  }
+  FindGames(&SteamData);
+
+
 
   bool quit = false;
   while (!quit)
@@ -134,14 +145,54 @@ int main(int argc, char* argv[])
     ImVec2 windowspace;
     
 
-    igBegin("Steam Declutter!", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    igBegin("SteamSweep!", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
     igGetContentRegionAvail(&windowspace);
 
-    if (igButton("Submit", (ImVec2){300.0f, 100.0f})){
-      printf("hello\n");
+    if (igBeginTable("ItemTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | 
+      ImGuiTableFlags_Sortable, (ImVec2){0, ioptr->DisplaySize.y - 150}, 0)) {
+      // Create table headers
+      igTableSetupColumn("AppID", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 100, 0);
+      igTableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 200, 1);
+      igTableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 150, 2);
+      igTableSetupColumn("Last Played", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 150, 3);
+      igTableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort, 0, 4);
+      igTableHeadersRow();
 
+
+            // Retrieve sorting specs
+      ImGuiTableSortSpecs* sort_specs = igTableGetSortSpecs();
+      if (sort_specs && sort_specs->SpecsDirty) {
+          // Get the first sorting column
+          ImGuiTableColumnSortSpecs* spec = sort_specs->Specs;
+          if (spec) {
+              int column_index = spec->ColumnUserID; // Which column is sorted
+              bool ascending = (spec->SortDirection == ImGuiSortDirection_Ascending);
+
+              // Sort SteamData based on the selected column
+              sortSteamData(column_index, ascending, &SteamData);
+          }
+          sort_specs->SpecsDirty = false; // Mark sorting as handled
+      }
+
+      for (int i = 0; i < SteamData.GameCount-1; i++) {
+          if(SteamData.Games[i].AppID == 228980){
+            continue;
+          }
+          igTableNextRow(0, 0);
+          igTableSetColumnIndex(0);
+          igCheckbox(SteamData.Games[i].AppIDstr, &SteamData.Games[i].Selected);
+          igTableSetColumnIndex(1);
+          igText(SteamData.Games[i].Title);
+          igTableSetColumnIndex(2);
+          igText(SteamData.Games[i].SizeOnDiskstr);
+          igTableSetColumnIndex(3);
+          igText(SteamData.Games[i].LastPlayedstr);
+          igTableSetColumnIndex(4);
+          igText(SteamData.Games[i].Location);
+      }
+      igEndTable();
     }
-
+    
 
     igEnd();
 
@@ -169,19 +220,7 @@ int main(int argc, char* argv[])
     window = NULL;
   }
   SDL_Quit();
-
+  free(SteamData.Games);
   return 0;
 }
 
-
-
-bool FindLibraries(){
-
-
-
-  
-
-
-
-
-}

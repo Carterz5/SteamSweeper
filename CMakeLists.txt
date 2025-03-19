@@ -1,40 +1,86 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Project name
-project(dps_calc C)
+project(SteamSweep C)
 
-# Set C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Include directories
 include_directories(include)
 
-# Source files
-set(SOURCES src/main.c)
+# Source files - get all .c files in src/
+file(GLOB SOURCES src/*.c)
+
+#set output dir
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+file(MAKE_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 
 # Add executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# Detect platform and apply platform-specific settings
-if(WIN32)
-    message(STATUS "Compiling for Windows")    
-    # Remove default shared library prefix
-    set(CMAKE_SHARED_LIBRARY_PREFIX "")
-    
-    # Mark the executable as a Windows GUI application
-    set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE ON)
-    
-    # Library to link against for Windows
-    set(CIMGUI_LIB ${CMAKE_SOURCE_DIR}/include/cimgui_sdl.dll)
-else()
-    message(STATUS "Compiling for Linux")
-    
-    # Library to link against for Linux
-    set(CIMGUI_LIB ${CMAKE_SOURCE_DIR}/include/libcimgui_sdl.so)
+
+#close if not win32
+if(NOT WIN32)
+    message(FATAL_ERROR "This is not Windows, please compile on Windows")
 endif()
 
-# Find required libraries
+
+# Dynamically find the correct MSYS2 UCRT64 bin directory
+find_program(UCRT_GCC_PATH NAMES gcc HINTS "C:/msys64/ucrt64/bin" REQUIRED)
+get_filename_component(UCRT_BIN_DIR ${UCRT_GCC_PATH} DIRECTORY)
+
+# Install UCRT64 runtime DLLs dynamically
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${UCRT_BIN_DIR}/libgcc_s_seh-1.dll"
+        "${UCRT_BIN_DIR}/libstdc++-6.dll"
+        "${UCRT_BIN_DIR}/libwinpthread-1.dll"
+        "${UCRT_BIN_DIR}/SDL2.dll"
+        "${CMAKE_SOURCE_DIR}/include/cimgui_sdl.dll"
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
+# Check if DLLs exist in output
+if(NOT EXISTS "${UCRT_BIN_DIR}/libgcc_s_seh-1.dll")
+    message(FATAL_ERROR "Could not find MinGW UCRT64 runtime DLLs. Ensure MSYS2 UCRT64 is installed and properly configured.")
+endif()
+
+    
+# Remove default shared library prefix
+set(CMAKE_SHARED_LIBRARY_PREFIX "")
+
+# Mark the executable as a Windows GUI application
+set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE ON)
+
+# Library to link against for Windows
+set(CIMGUI_LIB ${CMAKE_SOURCE_DIR}/include/cimgui_sdl.dll)
+
+
+# Function to check if a package exists and install it (MSYS2)
+function(check_and_install_package PACKAGE_NAME PACMAN_NAME)
+    find_package(${PACKAGE_NAME} QUIET)
+    if(NOT ${PACKAGE_NAME}_FOUND)
+        message(WARNING "${PACKAGE_NAME} not found! Attempting to install using pacman...")
+        execute_process(COMMAND "pacman" "-S" "--noconfirm" "${PACMAN_NAME}"
+                        RESULT_VARIABLE PACMAN_RESULT
+                        OUTPUT_VARIABLE PACMAN_OUTPUT
+                        ERROR_VARIABLE PACMAN_ERROR
+                        OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(PACMAN_RESULT EQUAL 0)
+            message(STATUS "${PACKAGE_NAME} installed successfully.")
+        else()
+            message(FATAL_ERROR "Failed to install ${PACKAGE_NAME}. Run 'pacman -S ${PACMAN_NAME}' manually.")
+        endif()
+    else()
+        message(STATUS "${PACKAGE_NAME} is already installed.")
+    endif()
+endfunction()
+
+
+#install packages if they don't exist
+check_and_install_package(SDL2 mingw-w64-ucrt-x86_64-SDL2)
+check_and_install_package(GLEW mingw-w64-ucrt-x86_64-glew)
+
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
@@ -57,8 +103,4 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     BUILD_RPATH "${CMAKE_SOURCE_DIR}/include"
 )
 
-# Custom clean target
-add_custom_target(clean-all 
-    COMMAND ${CMAKE_COMMAND} -E remove ${PROJECT_NAME} ${CMAKE_BINARY_DIR}/*.o
-    COMMENT "Cleaning up binaries and object files"
-)
+message("cmake complete")

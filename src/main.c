@@ -57,7 +57,7 @@ int main(int argc, char* argv[])
   SDL_GetCurrentDisplayMode(0, &current);
   
   window = SDL_CreateWindow(
-      "Steam De-Clutter", 0, 0, 800, 600,
+      "SteamSweep", 0, 0, 1024, 768,
       SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
       );
   if (window == NULL) {
@@ -108,9 +108,12 @@ int main(int argc, char* argv[])
   } else {
     printf("Unable to locate steam installation. Please provide install location\n");
   }
-  FindGames(&SteamData);
-
-
+  FindGames(&SteamData, FALSE);
+  float SizeSelection = 0.0f;
+  int LastPlayedSelection = 0;
+  bool ShowPopup = FALSE;
+  bool waitingForInput = false;
+  unsigned int currentIndex = 0;
 
   bool quit = false;
   while (!quit)
@@ -145,11 +148,11 @@ int main(int argc, char* argv[])
     ImVec2 windowspace;
     
 
-    igBegin("SteamSweep!", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    igBegin("SteamSweeper!", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
     igGetContentRegionAvail(&windowspace);
 
     if (igBeginTable("ItemTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | 
-      ImGuiTableFlags_Sortable, (ImVec2){0, ioptr->DisplaySize.y - 150}, 0)) {
+      ImGuiTableFlags_Sortable, (ImVec2){0, ioptr->DisplaySize.y - 175}, 0)) {
       // Create table headers
       igTableSetupColumn("AppID", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 100, 0);
       igTableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort, 200, 1);
@@ -193,6 +196,81 @@ int main(int argc, char* argv[])
       igEndTable();
     }
     
+    if(igButton("Refresh", (ImVec2){100, 100})){
+      FindGames(&SteamData, TRUE);
+    }
+    igSameLine(0.0f, 10.0f);
+    if(igButton("Select All", (ImVec2){100, 100})){
+      SelectAll(&SteamData);
+    }
+    igSameLine(0.0f, 10.0f);
+    if(igButton("Deselect All", (ImVec2){100, 100})){
+      DeSelectAll(&SteamData);
+    }
+    igSameLine(0.0f, 10.0f);
+    if(igButton("Select Filtered Games", (ImVec2){200, 100})){
+      SelectFiltered(&SteamData, SizeSelection, LastPlayedSelection);
+    }
+    igSameLine(0.0f, 50.0f);
+    if(igButton("Uninstall Selected", (ImVec2){400, 100})){
+      ShowPopup = TRUE;
+    }
+    
+    igSliderFloat("File Size (More Than)", &SizeSelection, 0.0f, 500.0f, "%.1f GB", 0);
+    igSliderInt("Last Played (More Than)", &LastPlayedSelection, 0.0, 365, "%d days", 0);
+
+
+    if (ShowPopup) {
+              // Calculate the position to center the popup window
+      ImVec2 popupPos = (ImVec2){
+          (windowSize.x) * 0.5f, // X position: (screen width - popup width) / 2
+          (windowSize.y) * 0.5f  // Y position: (screen height - popup height) / 2
+      };
+
+      // Set the position of the popup to center it on the screen
+      igSetNextWindowPos(popupPos, ImGuiCond_Always, (ImVec2){0.5f, 0.5f});
+      igSetNextWindowSize((ImVec2){300.0f, 200.0f}, ImGuiCond_Always);
+      igBegin("Uninstaller", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+
+      // Check if there are games to uninstall
+      if (currentIndex < SteamData.GameCount) {
+          SteamGame *currentGame = &SteamData.Games[currentIndex];
+          
+          if (currentGame->Selected) { // Only proceed if the game is selected
+              igTextWrapped("Because of the way Steam works, you will need to confirm the uninstallation of each game with a steam popup. Please click uninstall when prompted by Steam.");
+              igText("Uninstalling: %s", currentGame->Title);
+  
+              if (!waitingForInput) {
+                  waitingForInput = true; // Start waiting for input
+              }
+  
+              if (waitingForInput) {
+                  if (igButton("Confirm Uninstall", (ImVec2){150, 30})) {
+                      UninstallGame(currentGame); // Uninstall the game
+                      currentIndex++; // Move to the next game
+                      waitingForInput = false; // Reset and wait for next user input
+                  }
+                  igSameLine(0.0f, 10.0f);
+                  if (igButton("Cancel", (ImVec2){150, 30})) {
+                    currentIndex++; // Move to the next game
+                    waitingForInput = false; // Reset and wait for next user input
+                }
+              }
+          } else {
+              currentIndex++; // Skip games that are not selected
+          }
+      } else {
+          igText("All selected games have been uninstalled.");
+          
+          if(igButton("Close", (ImVec2){150, 30})){
+            ShowPopup = FALSE;
+            currentIndex = 0;
+            FindGames(&SteamData, TRUE);
+          }
+      }
+  
+      igEnd();
+  }
 
     igEnd();
 

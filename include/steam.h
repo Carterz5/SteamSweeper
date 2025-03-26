@@ -39,7 +39,11 @@ typedef struct {
 
 bool FindLibraries(char libraries[MAX_LIBRARIES][256], int* library_count, char steamfolder[256]);
 bool FindSteamInstall(char filepath[], size_t size);
-void FindGames(SteamData* SteamData);
+void FindGames(SteamData* SteamData, bool refresh);
+void SelectAll(SteamData* SteamData);
+void DeSelectAll(SteamData* SteamData);
+void SelectFiltered(SteamData* SteamData, float FileSize, int LastPlayed);
+void UninstallGame(SteamGame* Game);
 void byte_to_human(uint64_t size_in_bytes, char *output, size_t output_size);
 int compareGames(void* context, const void* a, const void* b);
 void sortSteamData(int column, bool ascending, SteamData* steamData);

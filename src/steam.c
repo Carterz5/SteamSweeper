@@ -78,7 +78,13 @@ bool FindLibraries(char libraries[MAX_LIBRARIES][256], int* library_count, char 
   
   }
   
-  void FindGames(SteamData* SteamData) {
+  void FindGames(SteamData* SteamData, bool refresh) {
+    
+    if (refresh == true){
+        free(SteamData->Games);
+    }
+    
+    
     // First pass to count the number of games
     SteamData->GameCount = 0;
   
@@ -209,7 +215,63 @@ bool FindLibraries(char libraries[MAX_LIBRARIES][256], int* library_count, char 
     printf("Final game counter: %d\n", gamecounter);
   }
 
+  void SelectAll(SteamData* SteamData){
+    for (int i = 0; i < SteamData->GameCount; i++){
+        if(SteamData->Games[i].AppID == 228980){
+            continue;
+          }
+        SteamData->Games[i].Selected = TRUE;
+    }
 
+  }
+
+  void DeSelectAll(SteamData* SteamData){
+    for (int i = 0; i < SteamData->GameCount; i++){
+        SteamData->Games[i].Selected = FALSE;
+    }
+
+  }
+
+  void SelectFiltered(SteamData* SteamData, float FileSize, int LastPlayed){
+    uint64_t bytes = (uint64_t)(FileSize * 1073741824.0f);
+    uint64_t now = (time(NULL));
+    uint64_t UnixPlayed = (now - (LastPlayed * 86400));
+    
+    for (int i = 0; i < SteamData->GameCount; i++){
+        if (SteamData->Games[i].AppID == 228980){
+            continue;
+        }
+
+        if(FileSize == 0.0f && UnixPlayed >= SteamData->Games[i].LastPlayed){
+            SteamData->Games[i].Selected = TRUE;
+        } else if (LastPlayed == 0 && bytes <= SteamData->Games[i].SizeOnDisk){
+            SteamData->Games[i].Selected = TRUE;
+        } else if( FileSize != 0.0f && LastPlayed != 0 && bytes <= SteamData->Games[i].SizeOnDisk && UnixPlayed >= SteamData->Games[i].LastPlayed){
+            SteamData->Games[i].Selected = TRUE;
+        }
+        
+
+    }
+
+  }
+
+  void UninstallGame(SteamGame* Game){
+    // Create the steam uninstall URL
+    char uninstallCommand[MAX_PATH];
+    snprintf(uninstallCommand, sizeof(uninstallCommand), "steam://uninstall/%u", Game->AppID);
+
+    // Execute the uninstall command using ShellExecute
+    HINSTANCE result = ShellExecuteA(NULL, "open", uninstallCommand, NULL, NULL, SW_SHOW);
+
+    // Check if the command was successfully executed
+    if ((int)result <= 32) {
+        printf("Failed to execute command. Error code: %ld\n", (long)result);
+    } else {
+        printf("Uninstall command executed successfully.\n");
+    }
+
+
+  }
 
   void byte_to_human(uint64_t size_in_bytes, char *output, size_t output_size) {
     const char *units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
